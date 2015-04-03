@@ -125,7 +125,12 @@ module JsonRpcClient
         begin
           logger.debug("Geting response #{h_response.response}")
 
-          json_response = JSON.parse(h_response.response)
+          begin
+            json_response = JSON.parse(h_response.response)
+          rescue JSON::ParserError => e
+            raise JsonClientJsonParserError.new(e)
+          end
+
 
           responses = {}
 
@@ -156,7 +161,7 @@ module JsonRpcClient
                                            ))
             end
           end
-        rescue Exception => e
+        rescue JsonClientJsonParserError => e
           logger.error {
             ['HTTP response processing fail: ',
              e.message,
@@ -207,5 +212,8 @@ module JsonRpcClient
     def logger
       self.class.logger ||= NullLogger.instance
     end
+  end
+
+  class JsonClientJsonParserError < JSON::ParserError
   end
 end

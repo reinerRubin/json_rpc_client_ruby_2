@@ -44,7 +44,6 @@ class ClientTest < Test::Unit::TestCase
     assert(success, 'Test_one_shot_method: failed')
   end
 
-
   def test_one_bad_shot_method
     rpc_method = JsonRpcClient::RpcMethod.new(method: "test_one_bad_shot_method", params: "q")
 
@@ -243,6 +242,78 @@ class ClientTest < Test::Unit::TestCase
 
     assert_equal(success_hits, answers_by_rpc)
   end
+
+
+  def test_batch_swallow_exception
+    rpc_methods = [
+      JsonRpcClient::RpcMethod.new(method: "test_batch_swallow_exception"),
+      JsonRpcClient::RpcNotify.new(method: "notify"),
+      JsonRpcClient::RpcMethod.new(method: "test_batch_shot_method", params: "q"),
+      JsonRpcClient::RpcMethod.new(method: "give_me_fail", params: "q"),
+      JsonRpcClient::RpcMethod.new(method: "ignore_me", params: "q"),
+    ]
+
+    # methods + batch block
+    answers_by_rpc = rpc_methods.count { |m| m.kind_of? JsonRpcClient::RpcMethod } + 1
+    must_errors_hit = rpc_methods.count { |m| ['ignore_me', 'give_me_fail'].include?(m.method) }
+
+    answers = rpc_methods.map do |method|
+      if method.kind_of?(JsonRpcClient::RpcNotify) || method.method == 'ignore_me'
+        nil # notify
+      else
+        if method.method == 'give_me_fail'
+          %|{"id":"#{method.id}","jsonrpc":2.0,"error":{"code":-32601,"message":"nope"}}|
+        else
+          %|{"id":"#{method.id}","jsonrpc":2.0,"result":"ok"}|
+        end
+      end
+    end
+
+    reset_stub {
+      stub_request(:post, "http://localhost:4567/json_rpc").with { |http_request|
+        json_requests = JSON.parse(http_request.body) # [{}]
+
+        rpc_methods.each do |method|
+          next if method.kind_of?(JsonRpcClient::RpcNotify)
+          assert(json_requests.find { |r| r['id'] == method.id })
+        end
+        true
+      }.to_return(status: 200, body: "[#{answers.compact.join ','}]")
+    }
+
+    success_hits = 0
+    errors_hit = 0
+
+    begin
+      eventmachine(10) do
+        EM.add_timer(3, ->{ EM.stop });
+        client = JsonRpcClient::RpcClient.new('http://localhost:4567/json_rpc')
+
+        def_result = client.send(rpc_methods)
+
+        def_result.callback do |results|
+          raise JSON::ParserError.new("Nope nope nope")
+        end
+
+        def_result.each do |def_result|
+          # ok
+          def_result.callback do |result|
+          end
+
+          # 2 fail
+          def_result.errback do |error|
+            errors_hit += 1
+            stop_if(errors_hit == must_errors_hit)
+          end
+        end
+      end
+    rescue JSON::ParserError => e
+      assert true
+    else
+      assert false
+    end
+  end
+
 
   def stop_if(cond)
     EM.stop if cond
