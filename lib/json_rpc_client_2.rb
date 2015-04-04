@@ -13,7 +13,7 @@ module JsonRpcClient
     attr_reader :method, :params
 
     def initialize(method: nil, params: nil)
-      raise ArgumentError, 'RpcCall must have method' unless method
+      fail ArgumentError, 'RpcCall must have method' unless method
 
       @method = method
       @params = params
@@ -42,9 +42,7 @@ module JsonRpcClient
     end
 
     def rpc_body
-      super.tap { |body|
-        body[:id] = @id
-      }
+      super.tap { |body| body[:id] = @id }
     end
   end
 
@@ -71,10 +69,10 @@ module JsonRpcClient
     end
 
     def send(requests)
-      is_batch = requests.kind_of?(Array)
+      is_batch = requests.is_a?(Array)
       a_requests = [*requests]
 
-      raise(ArgumentError, 'JsonRpcClient::Client/send: [] - empty request') if a_requests.empty?
+      fail(ArgumentError, 'Empty json-rpc request') if a_requests.empty?
 
       rpc_json_body, need_response, def_responses = processing_requests(a_requests)
 
@@ -131,7 +129,6 @@ module JsonRpcClient
             raise JsonClientJsonParserError.new(e)
           end
 
-
           responses = {}
 
           a_responses = json_response.map do |r|
@@ -150,10 +147,10 @@ module JsonRpcClient
             if response
               def_resp.set_deferred_status(response.status, response)
             else
-              logger.error("Deferrable response without actual response!")
+              logger.error('Deferrable response without actual response!')
               error = RpcError.new(
                 code: RpcError::REQUEST_WITHOUT_ANSWER,
-                message: "Deferrable response without actual response"
+                message: 'Deferrable response without actual response'
               )
               def_resp.set_deferred_status(:failed, RpcErrorResponse.new(
                                              id: def_resp.id,
@@ -162,11 +159,11 @@ module JsonRpcClient
             end
           end
         rescue JsonClientJsonParserError => e
-          logger.error {
+          logger.error do
             ['HTTP response processing fail: ',
              e.message,
              e.backtrace].join "\n"
-          }
+          end
 
           send_fail(def_responses, RpcError.new(
                       code: RpcError::REQUEST_PROCESSING_ERROR,
@@ -185,7 +182,7 @@ module JsonRpcClient
     end
 
     def create_response(response)
-      if response.has_key?('error')
+      if response.key?('error')
         error = response['error']
         RpcErrorResponse.new(
           id: response['id'],
@@ -201,8 +198,8 @@ module JsonRpcClient
     end
 
     def send_fail(def_responses, error)
-      batchError = RpcErrorBatchResponse.new(error: error)
-      def_responses.set_deferred_status(batchError.status, batchError)
+      batch_error = RpcErrorBatchResponse.new(error: error)
+      def_responses.set_deferred_status(batch_error.status, batch_error)
       def_responses.each do |d_r|
         d_error = RpcErrorResponse.new(id: d_r.id, error: error)
         d_r.set_deferred_status(d_error.status, d_error)

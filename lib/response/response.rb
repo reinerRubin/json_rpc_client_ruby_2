@@ -1,6 +1,5 @@
 module JsonRpcClient
   module Response
-
     class RpcResponse
       def initialize
       end
@@ -13,7 +12,7 @@ module JsonRpcClient
     class RpcEntityResponse < RpcResponse
       def initialize(id: nil)
         super()
-        raise(ArgumentError, 'missing id') unless id
+        fail(ArgumentError, 'missing id') unless id
         @id = id
       end
     end
@@ -34,29 +33,29 @@ module JsonRpcClient
     class RpcError
       # Invalid JSON was received by the server.
       # An error occurred on the server while parsing the JSON text.
-      INVALID_JSON     = -32700
+      INVALID_JSON     = -32_700
       # The JSON sent is not a valid Request object.
-      INVALID_REQUEST  = -32600
+      INVALID_REQUEST  = -32_600
       # The method does not exist / is not available.
-      METHOD_NOT_FOUND = -32601
+      METHOD_NOT_FOUND = -32_601
       # Invalid method parameter(s).
-      INVALID_PARAMS   = -32602
+      INVALID_PARAMS   = -32_602
       # Internal JSON-RPC error.
-      INTERNAL_ERROR   = -32603
+      INTERNAL_ERROR   = -32_603
 
       # Client side errors
       # Processing request error
-      REQUEST_PROCESSING_ERROR = 12700
+      REQUEST_PROCESSING_ERROR = 12_700
       # Request was not answered
-      REQUEST_WITHOUT_ANSWER = 12701
+      REQUEST_WITHOUT_ANSWER = 12_701
       # HTTP send error
-      REQUEST_SEND_ERROR = 12600
+      REQUEST_SEND_ERROR = 12_600
 
       attr_reader :code, :message, :data
 
       def initialize(code: nil, message: nil, data: nil)
-        raise ArgumentError, "JsonRpcError lack code error" unless code
-        raise ArgumentError, "JsonRpcError lack message" unless message
+        fail ArgumentError, 'JsonRpcError lack code error' unless code
+        fail ArgumentError, 'JsonRpcError lack message' unless message
 
         @code = code
         @message = message
@@ -89,6 +88,5 @@ module JsonRpcClient
         :failed
       end
     end
-
   end
 end
