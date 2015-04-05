@@ -105,6 +105,8 @@ You can find more cases in test/*.
 ## Development
 Clone, "bundle instal", do something, check tests (bundle exec rake test)
 
+### TODO
+Make more comfortable in use
 
 # Copyright
 Copyright (C) 2012-2013, Textalk AB <http://textalk.se/>
