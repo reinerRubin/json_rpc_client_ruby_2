@@ -21,24 +21,46 @@ JsonRpcClient::RpcClient::logger = Logger.new(STDOUT)
 client = JsonRpcClient::RpcClient.new('http://rpc.server:port/json_rpc')
 
 EM.run do
-  def_result = client.send(JsonRpcClient::Request::RpcMethod.new(method: 'method', params: [param1: 'param1value']))
+  def_result = client.send(JsonRpcClient::Request::RpcMethod.new(
+    method: 'method',
+    params: [param1: 'param1value']
+  ))
   def_result.callback { |r| puts "Yay! Response: #{r.result}" }
   def_result.errback { |error| puts "Nope. Error code: #{error.error.code}" }
 
   # notifies without any responses
-  client.send(JsonRpcClient::Request::RpcNotify.new(method: 'method', params: [param1: 'param1value']))
+  client.send(JsonRpcClient::Request::RpcNotify.new(
+    method: 'method',
+    params: [param1: 'param1value']
+  ))
   # => nil
   client.send([
-    JsonRpcClient::Request::RpcNotify.new(method: 'method', params: [param1: 'param1value']),
-    JsonRpcClient::Request::RpcNotify.new(method: 'method', params: [param1: 'param1value'])
+  JsonRpcClient::Request::RpcNotify.new(
+    method: 'method',
+    params: [param1: 'param1value']
+  ),
+  JsonRpcClient::Request::RpcNotify.new(
+    method: 'method',
+    params: [param1: 'param1value']
+  )
   ])
   # => nil
 
   # batch request
   methods = [
-    JsonRpcClient::Request::RpcMethod.new(method: 'hello', params: [param1: 'param1value']),
-    JsonRpcClient::Request::RpcMethod.new(method: 'giveMeError', id: 90210, params: [param1: 'whyNot']),
-    JsonRpcClient::Request::RpcNotify.new(method: 'helloNotify', params: [param1: 'anotherParams'])
+    JsonRpcClient::Request::RpcMethod.new(
+      method: 'hello',
+	  params: [param1: 'param1value']
+	),
+    JsonRpcClient::Request::RpcMethod.new(
+	  method: 'giveMeError',
+	  id: 90210,
+	  params: [param1: 'whyNot']
+	),
+    JsonRpcClient::Request::RpcNotify.new(
+	  method: 'helloNotify',
+	  params: [param1: 'anotherParams']
+	)
   ]
 
   def_results = client.send(methods)
