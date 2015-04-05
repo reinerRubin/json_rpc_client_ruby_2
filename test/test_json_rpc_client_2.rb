@@ -18,7 +18,7 @@ class ClientTest < Test::Unit::TestCase
   end
 
   def test_one_shot_method
-    rpc_method = JsonRpcClient::RpcMethod.new(method: 'yamethod', params: 'q')
+    rpc_method = JsonRpcClient::Request::RpcMethod.new(method: 'yamethod', params: 'q')
 
     reset_stub do
       stub_request(:post, 'http://localhost:4567/json_rpc').with { |http_request|
@@ -45,7 +45,7 @@ class ClientTest < Test::Unit::TestCase
   end
 
   def test_one_bad_shot_method
-    rpc_method = JsonRpcClient::RpcMethod.new(method: 'test_one_bad_shot_method', params: 'q')
+    rpc_method = JsonRpcClient::Request::RpcMethod.new(method: 'test_one_bad_shot_method', params: 'q')
     error_code = JsonRpcClient::Response::RpcError::METHOD_NOT_FOUND
     response_body = %([{"id":"#{rpc_method.id}","jsonrpc":2.0,"error":{"code":#{error_code},"message":"nope"}}])
 
@@ -76,7 +76,7 @@ class ClientTest < Test::Unit::TestCase
   end
 
   def test_one_bad_shot_method_invalide_json
-    rpc_method = JsonRpcClient::RpcMethod.new(method: 'test_one_bad_shot_method_invalide_json', params: 'q')
+    rpc_method = JsonRpcClient::Request::RpcMethod.new(method: 'test_one_bad_shot_method_invalide_json', params: 'q')
 
     reset_stub do
       stub_request(:post, 'http://localhost:4567/json_rpc').with { |http_request|
@@ -106,7 +106,7 @@ class ClientTest < Test::Unit::TestCase
   end
 
   def test_one_shot_method_timeout
-    rpc_method = JsonRpcClient::RpcMethod.new(method: 'test_one_shot_method_timeout', params: 'q')
+    rpc_method = JsonRpcClient::Request::RpcMethod.new(method: 'test_one_shot_method_timeout', params: 'q')
 
     reset_stub do
       stub_request(:post, 'http://localhost:4567/json_rpc').with { |http_request|
@@ -136,7 +136,7 @@ class ClientTest < Test::Unit::TestCase
   end
 
   def test_one_shot_method_without_answer
-    rpc_method = JsonRpcClient::RpcMethod.new(method: 'test_one_shot_method_without_answer', params: 'q')
+    rpc_method = JsonRpcClient::Request::RpcMethod.new(method: 'test_one_shot_method_without_answer', params: 'q')
 
     reset_stub do
       stub_request(:post, 'http://localhost:4567/json_rpc').with { |http_request|
@@ -165,7 +165,7 @@ class ClientTest < Test::Unit::TestCase
   end
 
   def test_one_shot_notify
-    rpc_method = JsonRpcClient::RpcNotify.new(method: 'test_one_shot_notify', params: 'q')
+    rpc_method = JsonRpcClient::Request::RpcNotify.new(method: 'test_one_shot_notify', params: 'q')
 
     reset_stub do
       stub_request(:post, 'http://localhost:4567/json_rpc').with { |http_request|
@@ -187,18 +187,18 @@ class ClientTest < Test::Unit::TestCase
 
   def test_batch_shot
     rpc_methods = [
-      JsonRpcClient::RpcMethod.new(method: 'test_batch_shot_method'),
-      JsonRpcClient::RpcNotify.new(method: 'notify'),
-      JsonRpcClient::RpcMethod.new(method: 'test_batch_shot_method', params: 'q'),
-      JsonRpcClient::RpcMethod.new(method: 'give_me_fail', params: 'q'),
-      JsonRpcClient::RpcMethod.new(method: 'ignore_me', params: 'q')
+      JsonRpcClient::Request::RpcMethod.new(method: 'test_batch_shot_method'),
+      JsonRpcClient::Request::RpcNotify.new(method: 'notify'),
+      JsonRpcClient::Request::RpcMethod.new(method: 'test_batch_shot_method', params: 'q'),
+      JsonRpcClient::Request::RpcMethod.new(method: 'give_me_fail', params: 'q'),
+      JsonRpcClient::Request::RpcMethod.new(method: 'ignore_me', params: 'q')
     ]
 
     # methods + batch block
-    answers_by_rpc = rpc_methods.count { |m| m.is_a? JsonRpcClient::RpcMethod } + 1
+    answers_by_rpc = rpc_methods.count { |m| m.is_a? JsonRpcClient::Request::RpcMethod } + 1
 
     answers = rpc_methods.map do |method|
-      if method.is_a?(JsonRpcClient::RpcNotify) || method.method == 'ignore_me'
+      if method.is_a?(JsonRpcClient::Request::RpcNotify) || method.method == 'ignore_me'
         nil # notify
       else
         if method.method == 'give_me_fail'
@@ -214,7 +214,7 @@ class ClientTest < Test::Unit::TestCase
         json_requests = JSON.parse(http_request.body) # [{}]
 
         rpc_methods.each do |method|
-          next if method.is_a?(JsonRpcClient::RpcNotify)
+          next if method.is_a?(JsonRpcClient::Request::RpcNotify)
           assert(json_requests.find { |r| r['id'] == method.id })
         end
         true
@@ -258,18 +258,18 @@ class ClientTest < Test::Unit::TestCase
 
   def test_batch_swallow_exception
     rpc_methods = [
-      JsonRpcClient::RpcMethod.new(method: 'test_batch_swallow_exception'),
-      JsonRpcClient::RpcNotify.new(method: 'notify'),
-      JsonRpcClient::RpcMethod.new(method: 'test_batch_shot_method', params: 'q'),
-      JsonRpcClient::RpcMethod.new(method: 'give_me_fail', params: 'q'),
-      JsonRpcClient::RpcMethod.new(method: 'ignore_me', params: 'q')
+      JsonRpcClient::Request::RpcMethod.new(method: 'test_batch_swallow_exception'),
+      JsonRpcClient::Request::RpcNotify.new(method: 'notify'),
+      JsonRpcClient::Request::RpcMethod.new(method: 'test_batch_shot_method', params: 'q'),
+      JsonRpcClient::Request::RpcMethod.new(method: 'give_me_fail', params: 'q'),
+      JsonRpcClient::Request::RpcMethod.new(method: 'ignore_me', params: 'q')
     ]
 
     # methods + batch block
     must_errors_hit = rpc_methods.count { |m| %w('ignore_me', 'give_me_fail').include?(m.method) }
 
     answers = rpc_methods.map do |method|
-      if method.is_a?(JsonRpcClient::RpcNotify) || method.method == 'ignore_me'
+      if method.is_a?(JsonRpcClient::Request::RpcNotify) || method.method == 'ignore_me'
         nil # notify
       else
         if method.method == 'give_me_fail'
@@ -285,7 +285,7 @@ class ClientTest < Test::Unit::TestCase
         json_requests = JSON.parse(http_request.body) # [{}]
 
         rpc_methods.each do |method|
-          next if method.is_a?(JsonRpcClient::RpcNotify)
+          next if method.is_a?(JsonRpcClient::Request::RpcNotify)
           assert(json_requests.find { |r| r['id'] == method.id })
         end
         true

@@ -7,55 +7,9 @@ require 'null_logger'
 
 require 'response/response'
 require 'response/deferrable_response'
+require 'request/request'
 
 module JsonRpcClient
-  class RpcCall
-    attr_reader :method, :params
-
-    def initialize(method: nil, params: nil)
-      fail ArgumentError, 'RpcCall must have method' unless method
-
-      @method = method
-      @params = params
-    end
-
-    def need_response?
-      true
-    end
-
-    def rpc_body
-      body = {
-        method: @method
-      }
-      body[:params] = @params if @params
-      body
-    end
-  end
-
-  class RpcMethod < RpcCall
-    attr_reader :id
-
-    def initialize(id: nil, method: nil, params: nil)
-      super(method: method, params: params)
-
-      @id = id || SecureRandom.uuid
-    end
-
-    def rpc_body
-      super.tap { |body| body[:id] = @id }
-    end
-  end
-
-  class RpcNotify < RpcCall
-    def initialize(method: nil, params: nil)
-      super(method: method, params: params)
-    end
-
-    def need_response?
-      false
-    end
-  end
-
   class RpcClient
     include JsonRpcClient::Response
 
@@ -65,7 +19,7 @@ module JsonRpcClient
 
     def initialize(service_uri, options = {})
       @service_uri = Addressable::URI.parse(service_uri)
-      logger.debug("Init client #{@service_uri}")
+      logger.debug("Initialization client #{@service_uri}")
     end
 
     def send(requests)
