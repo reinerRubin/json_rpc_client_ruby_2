@@ -73,8 +73,8 @@ EM.run do
   batch_request.notify(method: 'ready') # => nil
 
   def_result = batch_request.method(method: 'hello1', params: [p1: 'p2'])
-  def_result.callback { |r| puts 'yay! result' }
-  def_result.error { |e| puts "error #{e.error.error}"}
+  def_result.callback { |r| puts "yay! result #{r.result}" }
+  def_result.errback { |e| puts "error #{e.error.error}"}
 
   def_results = batch_request.send
 
@@ -94,24 +94,24 @@ EM.run do
     def_result.errback  { |error| puts "single errback #{error.error.code}" }
   end
 
-  def_results.errback { |error| puts "Nope. Error code: #{error.error.code}"
+  def_results.errback { |error| puts "Nope. Error code: #{error.error.code}" }
 
 
   # or
   methods = [
     JsonRpcClient::Request::RpcMethod.new(
       method: 'hello',
-	  params: [param1: 'param1value']
-	),
+      params: [param1: 'param1value']
+    ),
     JsonRpcClient::Request::RpcMethod.new(
-	  method: 'giveMeError',
-	  id: 90210,
-	  params: [param1: 'whyNot']
-	),
+      method: 'giveMeError',
+      id: 90210,
+      params: [param1: 'whyNot']
+    ),
     JsonRpcClient::Request::RpcNotify.new(
-	  method: 'helloNotify',
-	  params: [param1: 'anotherParams']
-	)
+      method: 'helloNotify',
+      params: [param1: 'anotherParams']
+    )
   ]
 
   def_results = client.send(methods)
