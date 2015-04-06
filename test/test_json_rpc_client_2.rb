@@ -18,16 +18,18 @@ class ClientTest < Test::Unit::TestCase
   end
 
   def test_one_shot_method
-    rpc_method = JsonRpcClient::Request::RpcMethod.new(method: 'yamethod', params: 'q')
-
     reset_stub do
-      stub_request(:post, 'http://localhost:4567/json_rpc').with { |http_request|
-        json_requests = JSON.parse(http_request.body) # [{}]
+      stub_request(:post, 'http://localhost:4567/json_rpc').to_return do |http_request|
+        json = JSON.parse(http_request.body)
 
-        assert(json_requests.find { |r| r['id'] == rpc_method.id })
+        assert(json.find { |r| r['method'] == 'method1' && r['params'] == 'params'  }, 'Request must be sended')
 
-        true
-      }.to_return(status: 200, body: %([{"id":"#{rpc_method.id}","jsonrpc":2.0,"result":"ok"}]))
+        answer = json.map do |req|
+          %({"id":"#{req['id']}","jsonrpc":2.0,"result":"ok"})
+        end
+
+        { status: 200, body: "[#{answer.join ','}]" }
+      end
     end
 
     success = false
@@ -36,7 +38,7 @@ class ClientTest < Test::Unit::TestCase
       EM.add_timer(3, ->{ EM.stop })
       client = JsonRpcClient::RpcClient.new('http://localhost:4567/json_rpc')
 
-      def_result = client.send(rpc_method)
+      def_result = client.method(method: 'method1', params: 'params')
 
       def_result.callback { |result| success = (result.result == 'ok'); EM.stop }
     end
@@ -185,6 +187,24 @@ class ClientTest < Test::Unit::TestCase
     end
   end
 
+  def test_one_shot_another_style
+    reset_stub do
+      stub_request(:post, 'http://localhost:4567/json_rpc').with { |http_request|
+        JSON.parse(http_request.body)
+      }.to_return(status: 200)
+    end
+
+    eventmachine(10) do
+      EM.add_timer(3, ->{ EM.stop })
+      client = JsonRpcClient::RpcClient.new('http://localhost:4567/json_rpc')
+
+      def_result = client.notify(method: 'test_one_shot_notify', params: 'q')
+
+      assert def_result.nil?
+      EM.stop
+    end
+  end
+
   def test_batch_shot
     rpc_methods = [
       JsonRpcClient::Request::RpcMethod.new(method: 'test_batch_shot_method'),
@@ -253,7 +273,7 @@ class ClientTest < Test::Unit::TestCase
       end
     end
 
-    assert_equal(success_hits, answers_by_rpc)
+    assert_equal(answers_by_rpc, success_hits)
   end
 
   def test_batch_swallow_exception
@@ -321,6 +341,163 @@ class ClientTest < Test::Unit::TestCase
       assert true
     else
       assert false
+    end
+  end
+
+  def test_batch_request_pre
+    client = JsonRpcClient::RpcClient.new('http://localhost:4567/json_rpc')
+    one_notify = false
+
+    reset_stub do
+      stub_request(:post, 'http://localhost:4567/json_rpc').to_return do |http_request|
+        json_requests = JSON.parse(http_request.body)
+
+        answers = json_requests.map do |json|
+          one_notify = true unless json.key?('id')
+
+          if json['method'] == 'give_me_error'
+            format(
+              %({"id":"#{json['id']}","jsonrpc":2.0,"error": {"code": %d, "message": "nope"}}),
+              JsonRpcClient::Response::RpcError::METHOD_NOT_FOUND
+            )
+          elsif !json.key?('id')
+            one_notify = true
+            nil
+          else
+            %({"id":"#{json['id']}","jsonrpc":2.0,"result":"ok"})
+          end
+        end
+
+        { status: 200, body: "[#{answers.compact.join(',')}]" }
+      end
+    end
+
+    success_hit = 0
+    success_hit_target = 3
+
+    batch_request = client.batch_request
+
+    eventmachine(10) do
+      EM.add_timer(3, -> { EM.stop })
+      assert batch_request.notify(method: 'smth_ready', params: [1, 2, 3]).nil?
+
+      def_result1 = batch_request.method(method: 'method1')
+
+      def_result1.callback do |_result|
+        success_hit += 1
+        stop_if(success_hit_target == success_hit)
+      end
+
+      def_result2 = batch_request.method(method: 'give_me_error', params: [1], id: 3)
+
+      def_result2.errback do |_error|
+        success_hit += 1
+        stop_if(success_hit_target == success_hit)
+      end
+
+      def_results = batch_request.send
+
+      def_results.callback do |results|
+        assert_equal(2, results.count, 'in batch results must be 2 responses')
+        success_hit += 1
+      end
+    end
+    assert(one_notify, 'at least one notify must be')
+    assert_equal(success_hit_target, success_hit)
+  end
+
+  def test_batch_request_after
+    one_notify = false
+
+    reset_stub do
+      stub_request(:post, 'http://localhost:4567/json_rpc').to_return do |http_request|
+        json_requests = JSON.parse(http_request.body)
+
+        answers = json_requests.map do |json|
+          one_notify = true unless json.key?('id')
+
+          if json['method'] == 'give_me_error'
+            format(
+              %({"id":"#{json['id']}","jsonrpc":2.0,"error": {"code": %d, "message": "nope"}}),
+              JsonRpcClient::Response::RpcError::METHOD_NOT_FOUND
+            )
+          elsif !json.key?('id')
+            one_notify = true
+            nil
+          else
+            %({"id":"#{json['id']}","jsonrpc":2.0,"result":"ok"})
+          end
+        end
+
+        { status: 200, body: "[#{answers.compact.join(',')}]" }
+      end
+    end
+
+    success_hit = 0
+    success_hit_target = 3
+
+    batch_request = JsonRpcClient::BatchRequest.new
+
+    eventmachine(10) do
+      EM.add_timer(3, -> { EM.stop })
+      assert batch_request.notify(method: 'smth_ready', params: [1, 2, 3]).nil?
+
+      def_result1 = batch_request.method(method: 'method1')
+
+      def_result1.callback do |_result|
+        success_hit += 1
+        stop_if(success_hit_target == success_hit)
+      end
+
+      def_result2 = batch_request.method(method: 'give_me_error', params: [1], id: 3)
+
+      def_result2.errback do |_error|
+        success_hit += 1
+        stop_if(success_hit_target == success_hit)
+      end
+
+      def_results = batch_request.send(
+        json_rpc_client: JsonRpcClient::RpcClient.new('http://localhost:4567/json_rpc')
+      )
+
+      def_results.callback do |results|
+        assert_equal(2, results.count, 'in batch results must be 2 responses')
+        success_hit += 1
+      end
+    end
+
+    assert(one_notify, 'at least one notify must be')
+    assert_equal(success_hit_target, success_hit)
+  end
+
+  def test_notify_answers
+    client = JsonRpcClient::RpcClient.new('http://localhost:4567/json_rpc')
+
+    reset_stub do
+      stub_request(:post, 'http://localhost:4567/json_rpc').to_return do |_http_request|
+        { status: 200 }
+      end
+    end
+
+    eventmachine(10) do
+      assert client.notify(method: 'm', params: []).nil?
+
+      batch_request = client.batch_request
+      assert batch_request.notify(method: 'm', params: []).nil?
+      assert batch_request.notify(method: 'm', params: []).nil?
+      assert batch_request.send.nil?
+
+      batch_request1 = JsonRpcClient::BatchRequest.new
+      assert batch_request1.notify(method: 'm', params: []).nil?
+      assert batch_request1.notify(method: 'm', params: []).nil?
+      assert batch_request1.send(json_rpc_client: client).nil?
+
+      assert client.send([
+                    JsonRpcClient::Request::RpcNotify.new(method: 'm1'),
+                    JsonRpcClient::Request::RpcNotify.new(method: 'm2')
+                  ]).nil?
+
+      EM.stop
     end
   end
 

@@ -10,6 +10,47 @@ require 'response/deferrable_response'
 require 'request/request'
 
 module JsonRpcClient
+  class BatchRequest
+    attr_reader :request, :def_responses
+
+    def initialize(json_rpc_client: nil)
+      @requests = []
+      @def_responses = []
+      @is_batch = true
+
+      @json_rpc_client = json_rpc_client
+    end
+
+    def notify(method: method, params: nil)
+      @requests << JsonRpcClient::Request::RpcNotify.new(method: method, params: params)
+      nil
+    end
+
+    def method(method: method, params: nil, id: nil)
+      r = JsonRpcClient::Request::RpcMethod.new(method: method, params: params, id: id)
+      @requests << r
+      deferrable_response = JsonRpcClient::Response::RpcDefResponse.new(id: r.id, method: r.method, params: r.params)
+      @def_responses << deferrable_response
+      deferrable_response
+    end
+
+    def send(json_rpc_client: nil) # => []
+      finalize
+      fail('Ambiguous json-rpc-client') if @json_rpc_client && json_rpc_client
+      @json_rpc_client ||= json_rpc_client
+      fail('Json-rpc-client not specified') unless @json_rpc_client
+
+      def_responses = Response::RpcDefResponses.new(@def_responses)
+
+      @json_rpc_client.send_requests(@requests, def_responses, @is_batch)
+    end
+
+    def finalize
+      @requests.freeze
+      @def_responses.freeze
+    end
+  end
+
   class RpcClient
     include JsonRpcClient::Response
 
@@ -17,7 +58,7 @@ module JsonRpcClient
       attr_accessor :logger
     end
 
-    def initialize(service_uri, options = {})
+    def initialize(service_uri, _options = {})
       @service_uri = Addressable::URI.parse(service_uri)
       logger.debug("Initialization client #{@service_uri}")
     end
@@ -28,51 +69,72 @@ module JsonRpcClient
 
       fail(ArgumentError, 'Empty json-rpc request') if a_requests.empty?
 
-      rpc_json_body, need_response, def_responses = processing_requests(a_requests)
+      rpc_json_body, def_responses = processing_requests(a_requests)
 
-      logger.debug("Sending request: #{rpc_json_body}")
+      send_json(rpc_json_body, def_responses, is_batch)
+    end
 
-      http_response = EM::HttpRequest.new(@service_uri.to_s).post(
-        :body => rpc_json_body,
-        'content-type' => 'application/json'
-      )
+    def batch_request
+      BatchRequest.new(json_rpc_client: self)
+    end
 
-      return unless need_response
+    def notify(method: method, params: nil)
+      send(JsonRpcClient::Request::RpcNotify.new(method: method, params: params))
+    end
 
-      # at least one response
-      processing_responses(http_response, def_responses)
+    def method(method: method, params: nil, id: nil)
+      send(JsonRpcClient::Request::RpcMethod.new(method: method, params: params, id: id))
+    end
 
-      is_batch ? def_responses : def_responses.first
+    def send_requests(requests, def_responses, is_batch = true)
+      json_body = gen_json(requests)
+      send_json(json_body, def_responses, is_batch)
     end
 
     private
 
+    def send_json(rpc_json_body, def_responses, is_batch)
+      http_response = http_send_rpc_json(rpc_json_body)
+
+      return if !def_responses || def_responses.responses.empty?
+
+      tie_response_to_def_results(http_response, def_responses)
+      is_batch ? def_responses : def_responses.first
+    end
+
+    def http_send_rpc_json(rpc_json)
+      logger.debug("Sending request: #{rpc_json}")
+
+      EM::HttpRequest.new(@service_uri.to_s).post(
+        :body => rpc_json,
+        'content-type' => 'application/json'
+      )
+    end
+
+    def gen_json(requests)
+      rpc_body = requests.map do |r|
+        add_rpc_version(r.rpc_body)
+      end
+      rpc_body.to_json
+    end
+
     def processing_requests(requests)
-      any_need_response = false
-      responses = []
+      def_responses = []
 
       rpc_body = requests.map do |r|
-        any_need_response ||= r.need_response?
-
         if r.need_response?
-          responses << RpcDefResponse.new(id: r.id, method: r.method, params: r.params)
+          def_responses << RpcDefResponse.new(id: r.id, method: r.method, params: r.params)
         end
 
-        rpc_body = r.rpc_body
-        add_rpc_version(rpc_body)
-        rpc_body
+        add_rpc_version(r.rpc_body)
       end
 
-      rpc_json = rpc_body.to_json
+      batch_def_response = RpcDefResponses.new(def_responses)
 
-      [rpc_json, any_need_response, RpcDefResponses.new(responses)]
+      [rpc_body.to_json, batch_def_response]
     end
 
-    def add_rpc_version(body)
-      body.tap { |b| b[:jsonrpc] = 2.0 }
-    end
-
-    def processing_responses(http_response, def_responses)
+    def tie_response_to_def_results(http_response, def_responses)
       http_response.callback do |h_response|
         begin
           logger.debug("Geting response #{h_response.response}")
@@ -133,6 +195,10 @@ module JsonRpcClient
                     message: "Error in http request: #{h_response.error}"
                   ))
       end
+    end
+
+    def add_rpc_version(body)
+      body.tap { |b| b[:jsonrpc] = 2.0 }
     end
 
     def create_response(response)

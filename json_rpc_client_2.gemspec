@@ -5,7 +5,7 @@ Gem::Specification.new do |s|
   s.homepage              = 'https://github.com/reinerRubin/json_rpc_client_ruby_2'
   s.license               = 'MIT'
   s.authors               = ['Fredrik Liljegren', 'Lars Olsson', 'Denis Dervisevic', 'Reiner Rubin']
-  s.version               = '0.1'
+  s.version               = '0.1.1'
   s.date                  = '2015-04-03'
   s.summary               = 'JSON-RPC 2.0 client.'
   s.description           = 'Asynchronous (EventMachine) JSON-RPC 2.0 over HTTP client.'
