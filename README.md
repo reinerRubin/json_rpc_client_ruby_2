@@ -11,8 +11,9 @@ Now (s.version = '0.1') all requests are batch requests.
 Gemfile:
 ```
 gem 'json_rpc_client_2', git: 'https://github.com/reinerRubin/json_rpc_client_ruby_2'
-
 ```
+
+Full example with rpc-server-stub: https://gist.github.com/reinerRubin/a4d9ac97b33e0f6e646d
 
 example.rb:
 ```ruby
