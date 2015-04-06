@@ -21,6 +21,12 @@ JsonRpcClient::RpcClient::logger = Logger.new(STDOUT)
 client = JsonRpcClient::RpcClient.new('http://rpc.server:port/json_rpc')
 
 EM.run do
+  # short
+  alt_def_result = client.method(method: 'method', params: [param1: 'param1value'])
+  alt_def_result.callback { |r| puts "Yay! Response: #{r.result}" }
+  alt_def_result.errback { |error| puts "Nope. Error code: #{error.error.code}" }
+
+  # or
   def_result = client.send(JsonRpcClient::Request::RpcMethod.new(
     method: 'method',
     params: [param1: 'param1value']
@@ -28,12 +34,23 @@ EM.run do
   def_result.callback { |r| puts "Yay! Response: #{r.result}" }
   def_result.errback { |error| puts "Nope. Error code: #{error.error.code}" }
 
+
   # notifies without any responses
+  # short
+  client.notify(method: 'method', params: [param1: 'param1value']) # => nil
+  # or
   client.send(JsonRpcClient::Request::RpcNotify.new(
     method: 'method',
     params: [param1: 'param1value']
-  ))
-  # => nil
+  )) # => nil
+  # batch
+  # "short"
+  batch_request = client.batch_request
+  batch_request.notify(method: 'm1', params: []) # => nil
+  batch_request.notify(method: 'm2', params: []) # => nil
+  batch_request.send # => nil
+
+  # or
   client.send([
   JsonRpcClient::Request::RpcNotify.new(
     method: 'method',
@@ -43,10 +60,44 @@ EM.run do
     method: 'method',
     params: [param1: 'param1value']
   )
-  ])
-  # => nil
+  ]) # => nil
 
   # batch request
+  # short
+  batch_request = client.batch_request
+
+  def_result = batch_request.method(method: 'hello', params: [p1: 'p2'])
+  def_result.callback { |r| 'yay! result' }
+  def_result.errback { |e| "error! #{e.error.code}" }
+
+  batch_request.notify(method: 'ready') # => nil
+
+  def_result = batch_request.method(method: 'hello1', params: [p1: 'p2'])
+  def_result.callback { |r| puts 'yay! result' }
+  def_result.error { |e| puts "error #{e.error.error}"}
+
+  def_results = batch_request.send
+
+  def_results.callback do |results| # result.count == 2 (2 methods, 1 notify)
+    puts 'Yay! Responses:'
+    results.each_with_index do |r, i|
+      if r.is_a? JsonRpcClient::Response::RpcSuccessResponse
+        puts "result #{i}: #{r.result}"
+      else
+        puts "result #{i}: #{r.error}"
+      end
+    end
+  end
+
+  def_results.each do |def_result|
+    def_result.callback { |r| puts "single callback #{r.result}"  }
+    def_result.errback  { |error| puts "single errback #{error.error.code}" }
+  end
+
+  def_results.errback { |error| puts "Nope. Error code: #{error.error.code}"
+
+
+  # or
   methods = [
     JsonRpcClient::Request::RpcMethod.new(
       method: 'hello',
@@ -65,7 +116,7 @@ EM.run do
 
   def_results = client.send(methods)
 
-  def_results.callback do |results|
+  def_results.callback do |results| # result.count == 2 (2 methods, 1 notify)
     puts 'Yay! Responses:'
     results.each_with_index do |r, i|
       if r.is_a? JsonRpcClient::Response::RpcSuccessResponse
